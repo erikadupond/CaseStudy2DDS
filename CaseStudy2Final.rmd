@@ -1,0 +1,221 @@
+---
+title: "CaseStudy2_Working"
+author: "Erika DuPond"
+date: "2024-04-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(tools)
+library(sf)
+library (class)
+library(caret)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word 
+
+```{r employee data, message=FALSE}
+#Import and name each data set
+
+data <- read.csv("https://msdsds6306.s3.amazonaws.com/CaseStudy2-data.csv")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+library(GGally)
+
+#Marital Status vs Attrition Data
+data %>%
+select(Attrition, MaritalStatus) %>%
+ggpairs(aes(color = Attrition))
+
+print("MaritalStatus")
+prop.table(table(data$MaritalStatus, data$Attrition), margin = 1) * 100
+prop.table(table(data$Attrition, data$MaritalStatus), margin = 1) * 100
+print(" ")
+
+#OverTime vs Attrition Data
+data %>%
+select(Attrition, OverTime) %>%
+ggpairs(aes(color = Attrition))
+
+print("OverTime")
+prop.table(table(Overtime=data$OverTime, Attrition=data$Attrition), margin = 1) * 100
+prop.table(table(Attrition=data$Attrition, Overtime=data$OverTime), margin = 1) * 100
+print(" ")
+
+#WorkLifeBalance vs Attrition Data
+data %>%
+select(Attrition, WorkLifeBalance) %>%
+ggpairs(aes(color = Attrition))
+
+print("WorkLifeBalance")
+prop.table(table(data$WorkLifeBalance, data$Attrition), margin = 1) * 100
+prop.table(table(data$Attrition, data$WorkLifeBalance), margin = 1) * 100
+
+```
+
+```{r Naive Bayes Method To Find Attrition Classification, echo=FALSE}
+### Naive Bayes Threshold Adjustment
+ 
+library(e1071)
+model <- naiveBayes(Attrition ~ MaritalStatus + OverTime + WorkLifeBalance, data=data)
+
+ # Predicting class probabilities
+ predicted_probs <- predict(model, data, type = "raw")
+ 
+ # Defining a sequence of thresholds to test
+ thresholds <- seq(0.1, 0.9, by = 0.01)
+ 
+ # Empty vector to store balanced accuracy
+ balanced_accuracy <- numeric(length(thresholds))
+ 
+ # Ensure Attrition is a factor with the correct levels
+ data$Attrition <- factor(data$Attrition, levels = c("No", "Yes"))
+
+# Looping through thresholds to calculate balanced accuracy
+ for(i in seq_along(thresholds)){
+     threshold <- thresholds[i]
+     predictions <- ifelse(predicted_probs[,2] > threshold, "Yes", "No")
+     
+     # Ensure that the predictions are factors with the correct levels
+     predictions <- factor(predictions, levels = c("No", "Yes"))
+     
+     cm <- confusionMatrix(predictions, data$Attrition)
+     sensitivity <- cm$byClass['Sensitivity']
+     specificity <- cm$byClass['Specificity']
+     balanced_accuracy[i] <- (sensitivity + specificity) / 2
+}
+# Find the threshold with the highest balanced accuracy
+ best_threshold <- thresholds[which.max(balanced_accuracy)]
+ best_threshold
+# Consider the chosen threshold to the probabilities to make final predictions
+ data$Predicted_Attrition <- ifelse(predicted_probs[, "Yes"] > best_threshold,"Yes","No")
+ data$Predicted_Attrition <- factor(data$Predicted_Attrition, levels = c("No","Yes"))
+ 
+  # Calculating the confusion matrix with the new predictions
+new_cm <- confusionMatrix(data$Predicted_Attrition, data$Attrition)
+
+# Printing the confusion matrix and related metrics
+print(new_cm)
+
+##################################################
+#Import Competition Dataset of No Attrition
+data_noattrition <- read.csv("https://msdsds6306.s3.amazonaws.com/CaseStudy2CompSet%20No%20Attrition.csv")
+
+#Test Against Competition!
+model <- naiveBayes(Attrition ~ MaritalStatus + OverTime + WorkLifeBalance, data=data)
+
+predicted_probs_test <- predict(model, data_noattrition, type = "raw")
+
+ data_noattrition$Predicted_Attrition <- ifelse(predicted_probs_test[, "Yes"] > 0.17,"Yes","No")
+ data_noattrition$Predicted_Attrition <- factor(data_noattrition$Predicted_Attrition, levels = c("No","Yes"))
+
+Data_PredictedAttrition <- data.frame(ID = data_noattrition$ID, Attrition = data_noattrition$Predicted_Attrition)
+#write.csv(Data_PredictedAttrition, "Case2Predictions_DuPond_Attrition.csv", row.names = FALSE)
+```
+
+```{r Finding MonthlyIncome Independent Variable, echo=FALSE}
+library(GGally)
+data_income <- data %>% filter(MonthlyIncome < 15000) 
+
+#Monthly Income Plots
+data_income %>%
+select(MonthlyIncome, JobLevel) %>%
+ggpairs(aes())
+```
+
+```{r Linear Regression Model to find Income, echo=FALSE}
+# Splitting the data into training and testing sets
+set.seed(123)  # for reproducibility
+training_indices <- createDataPartition(data$MonthlyIncome, p = 0.8, list = FALSE)
+training_data <- data[training_indices, ]
+testing_data <- data[-training_indices, ]
+
+# Fit a linear regression model
+model <- lm(MonthlyIncome ~ JobLevel, data = training_data)
+
+# Predicting on the test data
+predictions <- predict(model, testing_data)
+
+# Calculate RMSE
+summary(model)
+
+rmse_value <- sqrt(mean((predictions - testing_data$MonthlyIncome)^2))
+print(paste("RMSE: ", rmse_value))
+
+# Check if RMSE is below 3000
+if (rmse_value < 3000) { print("The RMSE is below 3000.")
+} else {print("The RMSE is not below 3000. Consider revising the model or using more suitable predictors.")
+}
+
+#Test model against competition set
+data_nosalary <- read.csv("https://msdsds6306.s3.amazonaws.com/CaseStudy2CompSet%20No%20Salary.csv")
+
+#model_test <- lm(MonthlyIncome ~ JobLevel, data = data_nosalary)
+testpredictions <- predict(model, data_nosalary)
+predictedsalary <- data.frame(ID = data_nosalary$ID, MonthlyIncome = testpredictions)
+#write.csv(predictedsalary, "Case2Predictions_DuPond_Salary.csv", row.names = FALSE)
+
+ggplot(data, aes(x = JobLevel, y = MonthlyIncome, color = JobLevel)) +  # Map aesthetics to variables
+  geom_point(size = 2, shape = 19) +  # Customize point size and shape
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(title = "Monthly Income vs Job Level", x = "Job Levels", y = "MonthlyIncome") +  # Add labels
+  theme_minimal() +  # Use a minimal theme
+  scale_color_gradient(low = "blue", high = "red")
+```
+
+
+```{r Failed KNN for filtered Job Role and No. of Companies Worked, echo=FALSE}
+#Create new filtered data sets!
+data_jobrole <- data
+
+# Convert the 'category' column to a factor
+data_jobrole$BusinessTravel <- as.factor(data_jobrole$BusinessTravel)
+data_jobrole$MaritalStatus <- as.factor(data_jobrole$MaritalStatus)
+data_jobrole$OverTime <- as.factor(data_jobrole$OverTime)
+data_jobrole$Department <- as.factor(data_jobrole$Department)
+
+
+# Convert the factor levels to numerical values
+data_jobrole$BusinessTravel <- as.numeric(data_jobrole$BusinessTravel)
+data_jobrole$MaritalStatus <- as.numeric(data_jobrole$MaritalStatus)
+data_jobrole$OverTime <- as.numeric(data_jobrole$OverTime)
+data_jobrole$Department <- as.numeric(data_jobrole$Department)
+
+
+
+# # # Normalize the data
+data_jobrole$OverTime <- scale(data_jobrole$OverTime)
+# data_jobrole$MonthlyIncome <- scale(data_jobrole$MonthlyIncome)
+data_jobrole$YearsWithCurrManager <- scale(data_jobrole$YearsWithCurrManager)
+data_jobrole$MaritalStatus <- scale(data_jobrole$MaritalStatus)
+
+
+# Prepare the data for the KNN classifier
+set.seed(1) 
+training_index <- sample(1:nrow(data_jobrole), 0.9*nrow(data_jobrole)) # 90% for training
+train <- data_jobrole[training_index,]
+test <- data_jobrole[-training_index,]
+
+# Train the KNN model
+knn_model <- knn(train = train[,c('OverTime','MaritalStatus')], 
+                 test = test[,c('OverTime','MaritalStatus')],
+                 cl = train$Attrition, prob = TRUE,
+                 k = 5)
+
+# Validate the model
+knn_table <- table(Predicted = knn_model, Actual = test$Attrition)
+
+confusionMatrix(knn_table)
+```
