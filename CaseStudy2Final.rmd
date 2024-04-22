@@ -1,5 +1,5 @@
 ---
-title: "CaseStudy2_Working"
+title: "CaseStudy2_Final"
 author: "Erika DuPond"
 date: "2024-04-10"
 output: html_document
@@ -19,7 +19,7 @@ library(caret)
 
 ## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word 
+Case Study Presentation: https://www.youtube.com/watch?v=an8WTrA9tRo&ab_channel=ErikaDuPond
 
 ```{r employee data, message=FALSE}
 #Import and name each data set
